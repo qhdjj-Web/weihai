@@ -55,8 +55,17 @@
         <div class="header">🏖️ 威海景点规划 | 勾选想去的地方</div>
         
         <div class="tabs">
-            <button class="tab-btn active" onclick="switchTab('list')">景点列表</button>
-            <button class="tab-btn" onclick="switchTab('route')">路线规划</button>
+            <button class="tab-btn active" data-tab="list" onclick="switchTab('list')">景点列表</button>
+            <button class="tab-btn" data-tab="route" onclick="switchTab('route')">路线规划</button>
+        </div>
+
+        <div class="btn-area" style="padding:10px 12px 0 12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+            <input id="mapSearchInput" type="text" placeholder="搜索威海景点、商圈、海滩" style="flex:1;padding:8px 10px;border:1px solid #ddd;border-radius:6px;font-size:12px">
+            <button onclick="searchMap()" style="flex:0 0 auto;background:#13c2c2">🔎 搜索</button>
+        </div>
+        <div id="searchResults" style="display:none;padding:0 12px 10px 12px">
+            <div style="font-size:12px;color:#666;margin:8px 0">地图搜索结果（点击“查看地图”定位，点击“添加”将地点加入列表）</div>
+            <div class="scroll-wrap" id="searchResultsBox"></div>
         </div>
 
         <div id="list-section" style="flex:1;display:flex;flex-direction:column">
@@ -72,7 +81,7 @@
             </div>
         </div>
 
-        <div id="route-section" style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <div id="route-section" style="flex:1;display:none;flex-direction:column;min-height:0">
             <div style="flex:1;overflow-y:auto;padding:10px;min-height:0">
                 <textarea id="outText" placeholder="生成后的路线会显示在这里，可以直接复制保存到备忘录/微信" style="width:100%;height:100%;border:1px solid #ddd;padding:8px;border-radius:6px;font-size:12px;resize:none"></textarea>
             </div>
@@ -85,8 +94,12 @@
         <div class="add-form" id="addForm">
             <h3 style="margin-bottom:10px;color:#007acc">📍 添加新景点</h3>
             <input type="text" id="newName" placeholder="景点名称" maxlength="20">
-            <input type="number" id="newLng" placeholder="经度(lng)" step="0.0001">
-            <input type="number" id="newLat" placeholder="纬度(lat)" step="0.0001">
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+                <input type="number" id="newLng" placeholder="经度(lng)" step="0.0001" style="flex:1">
+                <input type="number" id="newLat" placeholder="纬度(lat)" step="0.0001" style="flex:1">
+            </div>
+            <button type="button" onclick="startSelectPoint()" style="width:100%;margin:6px 0;padding:8px;background:#1890ff;color:#fff;border:none;border-radius:6px;cursor:pointer">🗺️ 地图上选点（点击地图选择位置）</button>
+            <div id="selectTip" style="font-size:12px;color:#444;margin-bottom:8px;min-height:18px">可点击上方按钮后，在地图中选择坐标。</div>
             <div style="display:flex;gap:6px;margin:6px 0">
                 <input type="file" id="newImgFile" accept="image/*" style="flex:1;font-size:11px">
                 <button onclick="previewImg()" style="padding:8px;background:#0066cc;width:60px">预览</button>
@@ -168,7 +181,47 @@ let spotList = [
         suggestTime:"09‑15点区间上岛游览",
         playTime:"游玩时长：3小时",
         food:"岛上渔家海鲜、海鱼豆腐汤"
+    },
+    {
+        name:"威海国际海水浴场",
+        lng:122.1290, lat:37.5135,
+        img:"https://images.amap.com/watermark/1693640894.jpg",
+        desc:"适合夏日戏水和沙滩漫步的开放式海滨浴场，家庭出游首选",
+        suggestTime:"建议10:00‑17:00 前往",
+        playTime:"游玩时长：2‑3小时",
+        food:"周边海鲜烧烤、鲜榨果饮"
+    },
+    {
+        name:"环翠楼公园",
+        lng:122.1162, lat:37.5058,
+        img:"https://images.amap.com/watermark/1693640894.jpg",
+        desc:"城市中心的历史公园，高处可俯瞰威海湾全景，适合慢行散步",
+        suggestTime:"建议08:00‑12:00 或 16:00‑19:00",
+        playTime:"游玩时长：1‑1.5小时",
+        food:"周边有本地小吃和咖啡馆"
+    },
+    {
+        name:"荣成石岛赤山",
+        lng:122.4530, lat:37.2815,
+        img:"https://images.amap.com/watermark/1693640894.jpg",
+        desc:"海滨风景区，有赤山寺和灯塔，适合拍照和观海",
+        suggestTime:"建议09:00‑16:30",
+        playTime:"游玩时长：3‑4小时",
+        food:"美食：海鲜大锅、渔家饭菜"
     }
+];
+
+const defaultSpotNames = [
+    "刘公岛",
+    "火炬八街",
+    "猫头山二号观景台",
+    "那香海",
+    "成山头（天尽头）",
+    "威海公园大相框",
+    "鸡鸣岛",
+    "威海国际海水浴场",
+    "环翠楼公园",
+    "荣成石岛赤山"
 ];
 
 // 颜色方案
@@ -178,6 +231,10 @@ let map;
 let markers = [];
 let selected = JSON.parse(localStorage.getItem('selSpot')||'[]');
 let activeSpotIdx = -1;
+let searchResults = [];
+let placeSearch = null;
+let addSelectMode = false;
+let selectMarker = null;
 
 // 初始化
 window.onload = function(){
@@ -186,20 +243,29 @@ window.onload = function(){
         zoom:10.5,
         center:[122.22,37.49]
     });
+    map.on('click', function(e){
+        if(addSelectMode){
+            const lng = e.lnglat.lng;
+            const lat = e.lnglat.lat;
+            setAddLocation(lng, lat);
+        }
+    });
     renderList();
     renderMarkers();
 }
 
 // localStorage中加载自定义景点和修改过的默认景点图片
 function loadSpots(){
+    const removedDefaultNames = JSON.parse(localStorage.getItem('removedDefaultSpots')||'[]');
+    spotList = spotList.filter(spot => !removedDefaultNames.includes(spot.name));
     const custom = JSON.parse(localStorage.getItem('customSpots')||'[]');
     spotList = spotList.concat(custom);
     
     // 应用已修改的默认景点图片
     const defaultImgOverride = JSON.parse(localStorage.getItem('defaultImgOverride')||'{}');
-    Object.keys(defaultImgOverride).forEach(idx => {
-        if(idx < 7) {
-            spotList[idx].img = defaultImgOverride[idx];
+    spotList.forEach(spot => {
+        if(defaultImgOverride[spot.name]){
+            spot.img = defaultImgOverride[spot.name];
         }
     });
 }
@@ -207,17 +273,17 @@ function loadSpots(){
 // 保存所有景点修改
 function saveSpots(){
     // 保存自定义景点
-    const custom = spotList.slice(7);
+    const custom = spotList.filter(s => !defaultSpotNames.includes(s.name));
     localStorage.setItem('customSpots',JSON.stringify(custom));
     
     // 保存默认景点的图片修改（只保存有修改的）
     const defaultImg = 'https://images.amap.com/watermark/1693640894.jpg';
     const defaultImgOverride = {};
-    for(let i = 0; i < 7; i++) {
-        if(spotList[i].img !== defaultImg) {
-            defaultImgOverride[i] = spotList[i].img;
+    spotList.forEach(s => {
+        if(defaultSpotNames.includes(s.name) && s.img !== defaultImg) {
+            defaultImgOverride[s.name] = s.img;
         }
-    }
+    });
     if(Object.keys(defaultImgOverride).length > 0) {
         localStorage.setItem('defaultImgOverride',JSON.stringify(defaultImgOverride));
     } else {
@@ -227,16 +293,186 @@ function saveSpots(){
 
 // 切换标签页
 function switchTab(tab){
-    if(tab==='list'){
-        document.getElementById('list-section').style.display='flex';
-        document.getElementById('route-section').style.display='none';
-    }else{
-        document.getElementById('list-section').style.display='none';
-        document.getElementById('route-section').style.display='flex';
+    const listSection = document.getElementById('list-section');
+    const routeSection = document.getElementById('route-section');
+    listSection.style.display = tab === 'list' ? 'flex' : 'none';
+    routeSection.style.display = tab === 'route' ? 'flex' : 'none';
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tab);
+    });
+}
+
+function searchMap(){
+    const query = document.getElementById('mapSearchInput').value.trim();
+    if(!query){
+        alert('请输入搜索关键词');
+        return;
     }
+    const searchCallback = function(status, result){
+        if(status !== 'complete' || !result || !Array.isArray(result.poiList?.pois) || result.poiList.pois.length === 0){
+            return false;
+        }
+        searchResults = result.poiList.pois;
+        renderSearchResults();
+        const first = searchResults[0];
+        if(first && first.location){
+            const [lng, lat] = first.location.split(',').map(Number);
+            map.setCenter([lng, lat]);
+            map.setZoom(14);
+        }
+        return true;
+    };
+    const failSearch = () => {
+        AMap.plugin('AMap.Geocoder', function(){
+            const geocoder = new AMap.Geocoder({ city: '威海', radius: 1000 });
+            geocoder.getLocation(query, (gs, result) => {
+                if(gs === 'complete' && result.geocodes && result.geocodes.length){
+                    const item = result.geocodes[0];
+                    searchResults = [{
+                        name: item.formattedAddress || query,
+                        address: item.formattedAddress,
+                        type: '',
+                        location: item.location.lng + ',' + item.location.lat
+                    }];
+                    renderSearchResults();
+                    map.setCenter([item.location.lng, item.location.lat]);
+                    map.setZoom(14);
+                    return;
+                }
+                alert('未找到匹配的地点，请换个关键词再试');
+            });
+        });
+    };
+    const doSearch = () => {
+        if(!placeSearch){
+            AMap.plugin('AMap.PlaceSearch', function(){
+                placeSearch = new AMap.PlaceSearch({
+                    city: '威海',
+                    pageSize: 10,
+                    pageIndex: 1
+                });
+                placeSearch.search(query, function(status, result){
+                    if(!searchCallback(status, result)){
+                        failSearch();
+                    }
+                });
+            });
+        } else {
+            placeSearch.search(query, function(status, result){
+                if(!searchCallback(status, result)){
+                    failSearch();
+                }
+            });
+        }
+    };
+    doSearch();
+}
+
+function renderSearchResults(){
+    const box = document.getElementById('searchResultsBox');
+    const container = document.getElementById('searchResults');
+    box.innerHTML = '';
+    if(searchResults.length === 0){
+        container.style.display = 'none';
+        return;
+    }
+    container.style.display = 'block';
+    searchResults.forEach((item, idx) => {
+        const div = document.createElement('div');
+        div.className = 'item';
+        div.style.padding = '10px';
+        div.innerHTML = `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:10px">
+                <div style="flex:1">
+                    <div style="font-weight:700;color:#222">${item.name}</div>
+                    <div class="tip">${item.address || item.type || ''}</div>
+                    <div class="tip">${item.type || ''}</div>
+                </div>
+                <div style="display:flex;flex-direction:column;gap:6px">
+                    <button style="padding:6px 10px;background:#1890ff;color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="centerSearchResult(${idx})">查看地图</button>
+                    <button style="padding:6px 10px;background:#52c41a;color:#fff;border:none;border-radius:6px;cursor:pointer" onclick="addSearchSpot(${idx})">添加</button>
+                </div>
+            </div>
+        `;
+        box.appendChild(div);
+    });
+}
+
+function addSearchSpot(index){
+    const item = searchResults[index];
+    if(!item) return;
+    if(spotList.some(s => s.name === item.name)){
+        alert('该地点已存在于列表中');
+        return;
+    }
+    if(!item.location){
+        alert('该地点没有可用坐标，无法添加');
+        return;
+    }
+    const [lng, lat] = item.location.split(',').map(Number);
+    const newSpot = {
+        name: item.name,
+        lng,
+        lat,
+        img: 'https://images.amap.com/watermark/1693640894.jpg',
+        desc: item.address || item.type || '来自地图搜索',
+        suggestTime: '建议根据实际时间安排',
+        playTime: '游玩时长：约1-2小时',
+        food: '周边美食待探索'
+    };
+    spotList.push(newSpot);
+    saveSpots();
+    renderList();
+    renderMarkers();
+    stopSelectPoint();
+    alert('已添加到景点列表，并在地图上显示');
+}
+
+function centerSearchResult(index){
+    const item = searchResults[index];
+    if(!item || !item.location) return;
+    const [lng, lat] = item.location.split(',').map(Number);
+    map.setCenter([lng, lat]);
+    map.setZoom(14);
+    alert('已在地图上定位该搜索结果');
 }
 
 // 图片预览
+function startSelectPoint(){
+    addSelectMode = true;
+    document.getElementById('selectTip').textContent = '请在地图上点击选点，点击后坐标会自动填写。';
+    alert('请在地图上点击位置来选点，选中后可继续填写其他信息。');
+}
+
+function stopSelectPoint(){
+    addSelectMode = false;
+    if(selectMarker){
+        selectMarker.setMap(null);
+        selectMarker = null;
+    }
+}
+
+function setAddLocation(lng, lat){
+    document.getElementById('newLng').value = lng.toFixed(6);
+    document.getElementById('newLat').value = lat.toFixed(6);
+    document.getElementById('selectTip').textContent = `已选位置：${lng.toFixed(6)}, ${lat.toFixed(6)}（可继续填写名称等）`;
+    if(!selectMarker){
+        selectMarker = new AMap.Marker({
+            position: [lng, lat],
+            map: map,
+            icon: new AMap.Icon({
+                image: 'https://webapi.amap.com/theme/v1.3/markers/n/mark_b.png',
+                size: new AMap.Size(21, 29),
+                imageSize: new AMap.Size(21, 29)
+            })
+        });
+    } else {
+        selectMarker.setPosition([lng, lat]);
+        selectMarker.setMap(map);
+    }
+    addSelectMode = false;
+}
+
 function previewImg(){
     const file = document.getElementById('newImgFile').files[0];
     if(!file){
@@ -261,6 +497,7 @@ function toggleAddForm(){
         document.getElementById('newImgFile').value='';
         document.getElementById('imgPreview').style.display='none';
         document.getElementById('imgPreview').src='';
+        stopSelectPoint();
     }
 }
 
@@ -320,6 +557,8 @@ function clearAddForm(){
     document.getElementById('newTime').value='';
     document.getElementById('newDuration').value='';
     document.getElementById('newFood').value='';
+    document.getElementById('selectTip').textContent='可点击上方按钮后，在地图中选择坐标。';
+    stopSelectPoint();
     toggleAddForm();
 }
 
@@ -357,6 +596,14 @@ function editSpotImg(idx){
 // 删除景点
 function deleteSpot(idx){
     if(!confirm('确定删除该景点？')){return;}
+    const spot = spotList[idx];
+    if(defaultSpotNames.includes(spot.name)){
+        const removedDefaultNames = JSON.parse(localStorage.getItem('removedDefaultSpots')||'[]');
+        if(!removedDefaultNames.includes(spot.name)){
+            removedDefaultNames.push(spot.name);
+            localStorage.setItem('removedDefaultSpots',JSON.stringify(removedDefaultNames));
+        }
+    }
     spotList.splice(idx,1);
     selected = selected.filter(i=>i!==idx).map(i=>i>idx?i-1:i);
     if(activeSpotIdx === idx){
@@ -391,7 +638,7 @@ function renderList(){
             </label>
             <div class="item-actions" onclick="event.stopPropagation()">
                 <button class="img-edit-btn" onclick="editSpotImg(${idx})">🖼️换图</button>
-                ${idx>=7?'<button class="btn-del" onclick="deleteSpot('+idx+')" style="padding:2px 6px;font-size:11px">删除</button>':''}
+                <button class="btn-del" onclick="deleteSpot(${idx})" style="padding:2px 6px;font-size:11px">删除</button>
             </div>
         </div>
         ${imgHtml}
