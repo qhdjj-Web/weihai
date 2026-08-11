@@ -1,0 +1,35 @@
+{
+  "exportTime": "2026/8/11 15:30:45",
+  "spots": [
+    {
+      "name": "环翠楼景区",
+      "lng": 122.1200,
+      "lat": 37.5100,
+      "img": "https://images.amap.com/watermark/1693640894.jpg",
+      "desc": "威海的城市地标，可俯瞰威海湾和城市景观，登顶视野开阔",
+      "suggestTime": "建议 09:00‑17:00",
+      "playTime": "游玩时长：1.5‑2小时",
+      "food": "周边美食：鲅鱼水饺、海鲜馄饨汤"
+    },
+    {
+      "name": "荣成石岛赤山",
+      "lng": 122.4500,
+      "lat": 37.2800,
+      "img": "https://images.amap.com/watermark/1693640894.jpg",
+      "desc": "海滨风景区，有寺庙、灯塔和观景台，是拍照的好地方",
+      "suggestTime": "建议 08:00‑16:30",
+      "playTime": "游玩时长：3‑4小时",
+      "food": "美食：海鲜大锅、渔家饭菜"
+    },
+    {
+      "name": "乳山银滩",
+      "lng": 121.8800,
+      "lat": 36.8900,
+      "img": "https://images.amap.com/watermark/1693640894.jpg",
+      "desc": "沙质细腻的海滩，适合游泳和休闲，每年夏季游人众多",
+      "suggestTime": "建议 10:00‑18:00",
+      "playTime": "游玩时长：2‑3小时",
+      "food": "周边：海鲜烧烤、贝类小吃"
+    }
+  ]
+}

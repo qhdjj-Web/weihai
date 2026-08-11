@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>威海自助游玩路线规划（高德地图版）</title>
+    <!-- 已填入你的专属高德Web端JSAPI Key -->
+    <script type="text/javascript" src="https://webapi.amap.com/maps?v=2.0&key=ee0de72a00c6122954e9e8c06f43b64d"></script>
+    <style>
+        * {margin:0;padding:0;box-sizing:border-box;font-family:system-ui}
+        body {display:flex;height:100vh;overflow:hidden;}
+        #map {width:60%;height:100%;}
+        .panel {width:40%;display:flex;flex-direction:column;background:#fff;border-left:2px solid #007acc;min-height:0}
+        .header{padding:12px;background:#007acc;color:white;font-weight:bold;font-size:16px}
+        #list-section{flex:1;display:flex;flex-direction:column;min-height:0}
+        .scroll-wrap{flex:1;overflow-y:auto;overflow-x:hidden;padding:10px;min-height:0}
+        .item{border:2px solid #ddd;border-radius:8px;padding:12px;margin-bottom:10px;transition:all 0.2s;cursor:pointer}
+        .item:hover{border-color:#007acc;background:#f9f9f9;box-shadow:0 2px 8px rgba(0,122,204,0.1)}
+        .item.selected{border-color:#007acc;background:#e6f2ff;border-width:3px}
+        .item.active{border-color:#ff6b6b;background:#ffe6e6}
+        .item-img{width:100%;height:140px;border-radius:6px;margin-bottom:8px;object-fit:cover;background:#f0f0f0;cursor:zoom-in}
+        .item h4{margin-bottom:4px;display:inline-block;color:#007acc;font-size:14px}
+        .item-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:6px}
+        .img-edit-btn{padding:2px 6px;font-size:11px;background:#0066cc;color:white;border:none;border-radius:3px;cursor:pointer;white-space:nowrap}
+        .img-edit-btn:hover{background:#0052a0}
+        .item-actions{display:flex;gap:4px}
+        .tip{font-size:12px;color:#666;margin:3px 0;line-height:1.4}
+        .btn-item{display:flex;gap:6px;margin-top:6px}
+        .btn-item button{padding:4px 8px;font-size:11px;border:none;border-radius:4px;cursor:pointer;flex:1}
+        .btn-del{background:#ff4444;color:white}
+        .btn-del:hover{background:#dd0000}
+        .btn-area{padding:12px;border-top:1px solid #eee;display:flex;flex-direction:column;gap:8px}
+        .btn-group{display:flex;gap:6px}
+        button{padding:8px 14px;background:#007acc;color:white;border:none;border-radius:6px;cursor:pointer;font-size:13px;flex:1}
+        button:hover{background:#0056a0}
+        textarea{width:100%;min-height:120px;margin-top:8px;border:1px solid #ddd;padding:8px;border-radius:6px;font-size:12px}
+        .add-form{padding:12px;border-top:1px solid #eee;background:#f5f5f5;display:none}
+        .add-form.show{display:block}
+        .add-form input, .add-form textarea{width:100%;padding:8px;margin:6px 0;border:1px solid #ddd;border-radius:4px;font-size:12px;font-family:system-ui}
+        .add-form button{padding:10px;font-size:12px}
+        .tabs{display:flex;gap:6px;margin-bottom:8px;border-bottom:1px solid #ddd}
+        .tab-btn{padding:6px 12px;border:none;background:none;cursor:pointer;color:#666;border-bottom:2px solid transparent;font-size:12px}
+        .tab-btn.active{color:#007acc;border-bottom-color:#007acc}
+        #route-section{display:none;flex-direction:column;min-height:0}
+        #route-section.show{display:flex}
+        .modal{position:absolute;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);display:none;z-index:1000;justify-content:center;align-items:center}
+        .modal.show{display:flex}
+        .modal-content{background:white;border-radius:8px;padding:20px;max-width:90%;max-height:80vh;overflow-y:auto}
+        .modal-close{position:absolute;top:10px;right:10px;background:none;border:none;font-size:24px;cursor:pointer}
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <div class="panel">
+        <div class="header">🏖️ 威海景点规划 | 勾选想去的地方</div>
+        
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('list')">景点列表</button>
+            <button class="tab-btn" onclick="switchTab('route')">路线规划</button>
+        </div>
+
+        <div id="list-section" style="flex:1;display:flex;flex-direction:column">
+            <div class="scroll-wrap" id="listBox"></div>
+            <div class="btn-area">
+                <div class="btn-group">
+                    <button onclick="toggleAddForm()" style="background:#52c41a">➕ 添加地点</button>
+                    <button onclick="genRoute()" style="background:#faad14">📋 生成路线</button>
+                </div>
+                <button onclick="exportData()" style="background:#13c2c2">💾 导出数据</button>
+                <button onclick="importData()" style="background:#722ed1">📂 导入数据</button>
+                <button onclick="copyExport()" style="background:#007acc">📄 复制导出</button>
+            </div>
+        </div>
+
+        <div id="route-section" style="flex:1;display:flex;flex-direction:column;min-height:0">
+            <div style="flex:1;overflow-y:auto;padding:10px;min-height:0">
+                <textarea id="outText" placeholder="生成后的路线会显示在这里，可以直接复制保存到备忘录/微信" style="width:100%;height:100%;border:1px solid #ddd;padding:8px;border-radius:6px;font-size:12px;resize:none"></textarea>
+            </div>
+            <div class="btn-area">
+                <button onclick="copyExport()" style="background:#007acc">📋 复制路线</button>
+                <button onclick="switchTab('list')" style="background:#999">← 返回列表</button>
+            </div>
+        </div>
+
+        <div class="add-form" id="addForm">
+            <h3 style="margin-bottom:10px;color:#007acc">📍 添加新景点</h3>
+            <input type="text" id="newName" placeholder="景点名称" maxlength="20">
+            <input type="number" id="newLng" placeholder="经度(lng)" step="0.0001">
+            <input type="number" id="newLat" placeholder="纬度(lat)" step="0.0001">
+            <div style="display:flex;gap:6px;margin:6px 0">
+                <input type="file" id="newImgFile" accept="image/*" style="flex:1;font-size:11px">
+                <button onclick="previewImg()" style="padding:8px;background:#0066cc;width:60px">预览</button>
+            </div>
+            <img id="imgPreview" style="width:100%;height:80px;object-fit:cover;border-radius:4px;margin-bottom:8px;display:none">
+            <input type="text" id="newDesc" placeholder="简介描述">
+            <input type="text" id="newTime" placeholder="建议游玩时段">
+            <input type="text" id="newDuration" placeholder="游玩时长">
+            <input type="text" id="newFood" placeholder="周边美食">
+            <div class="btn-group">
+                <button onclick="addSpot()" style="background:#52c41a">✓ 保存</button>
+                <button onclick="toggleAddForm()" style="background:#999">✕ 取消</button>
+            </div>
+        </div>
+    </div>
+
+<script>
+// 威海景点库
+let spotList = [
+    {
+        name:"刘公岛",
+        lng:122.1148, lat:37.5124,
+        img:"https://images.amap.com/watermark/1693640894.jpg",
+        desc:"北洋水师历史纪念地，需乘船登岛，包含博物馆、炮台遗址",
+        suggestTime:"建议 08:30‑14:00 前往",
+        playTime:"游玩时长：3‑4小时",
+        food:"周边美食：鲅鱼饺子、海鲜面、海菜包子"
+    },
+    {
+        name:"火炬八街",
+        lng:122.0745, lat:37.5346,
+        img:"https://images.amap.com/watermark/1693640894.jpg",
+        desc:"网红临海街道，临海日落打卡点，节假日人流量较大",
+        suggestTime:"建议 16:00‑18:00（观赏日落最佳时段）",
+        playTime:"游玩时长：0.5‑1小时",
+        food:"周边美食：韩式料理、烤鱿鱼、海鲜小烧烤"
+    },
+    {
+        name:"猫头山二号观景台",
+        lng:122.1421, lat:37.5470,
+        img:"https://images.amap.com/watermark/1693640894.jpg",
+        desc:"环海公路经典悬崖观海点位，海景视野开阔适合拍照",
+        suggestTime:"建议09:00‑11:30，避开正午强光",
+        playTime:"游玩时长：1小时",
+        food:"周边：渔家海鲜大排档"
+    },
+    {
+        name:"那香海",
+        lng:122.3640, lat:37.4143,
+        img:"https://images.amap.com/watermark/1693640894.jpg",
+        desc:"优质沙滩、钻石沙滩、海岸风车，适合休闲散步看海",
+        suggestTime:"建议15:00‑18点",
+        playTime:"游玩时长：2‑3小时",
+        food:"美食：海鲜大锅、烤扇贝"
+    },
+    {
+        name:"成山头（天尽头）",
+        lng:122.6834, lat:37.4212,
+        img:"https://images.amap.com/watermark/1693640894.jpg",
+        desc:"中国大陆海岸线最东端，国内近海日出最佳观赏地之一，景区收费",
+        suggestTime:"观日出需凌晨抵达，日间游览建议09‑14点",
+        playTime:"游玩时长：2.5小时",
+        food:"周边农家海鲜菜"
+    },
+    {
+        name:"威海公园大相框",
+        lng:122.1186, lat:37.5028,
+        img:"https://images.amap.com/watermark/1693640894.jpg",
+        desc:"城市地标打卡相框，免费开放式临海公园",
+        suggestTime:"全天可游览，傍晚景观最佳",
+        playTime:"游玩时长：0.5小时",
+        food:"周边分布大量海鲜餐馆"
+    },
+    {
+        name:"鸡鸣岛",
+        lng:122.3510, lat:37.4625,
+        img:"https://images.amap.com/watermark/1693640894.jpg",
+        desc:"综艺取景海岛，乘船登岛，海岛村落+悬崖步道景观",
+        suggestTime:"09‑15点区间上岛游览",
+        playTime:"游玩时长：3小时",
+        food:"岛上渔家海鲜、海鱼豆腐汤"
+    }
+];
+
+// 颜色方案
+const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8', '#F7DC6F', '#BB8FCE'];
+
+let map;
+let markers = [];
+let selected = JSON.parse(localStorage.getItem('selSpot')||'[]');
+let activeSpotIdx = -1;
+
+// 初始化
+window.onload = function(){
+    loadSpots();
+    map = new AMap.Map('map', {
+        zoom:10.5,
+        center:[122.22,37.49]
+    });
+    renderList();
+    renderMarkers();
+}
+
+// localStorage中加载自定义景点和修改过的默认景点图片
+function loadSpots(){
+    const custom = JSON.parse(localStorage.getItem('customSpots')||'[]');
+    spotList = spotList.concat(custom);
+    
+    // 应用已修改的默认景点图片
+    const defaultImgOverride = JSON.parse(localStorage.getItem('defaultImgOverride')||'{}');
+    Object.keys(defaultImgOverride).forEach(idx => {
+        if(idx < 7) {
+            spotList[idx].img = defaultImgOverride[idx];
+        }
+    });
+}
+
+// 保存所有景点修改
+function saveSpots(){
+    // 保存自定义景点
+    const custom = spotList.slice(7);
+    localStorage.setItem('customSpots',JSON.stringify(custom));
+    
+    // 保存默认景点的图片修改（只保存有修改的）
+    const defaultImg = 'https://images.amap.com/watermark/1693640894.jpg';
+    const defaultImgOverride = {};
+    for(let i = 0; i < 7; i++) {
+        if(spotList[i].img !== defaultImg) {
+            defaultImgOverride[i] = spotList[i].img;
+        }
+    }
+    if(Object.keys(defaultImgOverride).length > 0) {
+        localStorage.setItem('defaultImgOverride',JSON.stringify(defaultImgOverride));
+    } else {
+        localStorage.removeItem('defaultImgOverride');
+    }
+}
+
+// 切换标签页
+function switchTab(tab){
+    if(tab==='list'){
+        document.getElementById('list-section').style.display='flex';
+        document.getElementById('route-section').style.display='none';
+    }else{
+        document.getElementById('list-section').style.display='none';
+        document.getElementById('route-section').style.display='flex';
+    }
+}
+
+// 图片预览
+function previewImg(){
+    const file = document.getElementById('newImgFile').files[0];
+    if(!file){
+        alert('请选择图片文件');
+        return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        document.getElementById('imgPreview').src = e.target.result;
+        document.getElementById('imgPreview').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+}
+
+// 切换添加表单
+function toggleAddForm(){
+    const form = document.getElementById('addForm');
+    form.classList.toggle('show');
+    if(form.classList.contains('show')){
+        document.getElementById('newName').focus();
+    }else{
+        document.getElementById('newImgFile').value='';
+        document.getElementById('imgPreview').style.display='none';
+        document.getElementById('imgPreview').src='';
+    }
+}
+
+// 添加新景点
+function addSpot(){
+    const name = document.getElementById('newName').value.trim();
+    const lng = parseFloat(document.getElementById('newLng').value);
+    const lat = parseFloat(document.getElementById('newLat').value);
+    const desc = document.getElementById('newDesc').value.trim();
+    const time = document.getElementById('newTime').value.trim();
+    const duration = document.getElementById('newDuration').value.trim();
+    const food = document.getElementById('newFood').value.trim();
+    const imgFile = document.getElementById('newImgFile').files[0];
+
+    if(!name || !lng || !lat || !desc){
+        alert('请填写必要信息（名称、经纬度、描述）');
+        return;
+    }
+
+    if(lng<120||lng>124||lat<36||lat>38){
+        alert('经纬度超出威海范围');
+        return;
+    }
+
+    if(imgFile){
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const img = e.target.result;
+            const spot = {name,lng,lat,img,desc,suggestTime:time,playTime:duration,food};
+            spotList.push(spot);
+            saveSpots();
+            clearAddForm();
+            renderList();
+            renderMarkers();
+            alert('✅ 景点已添加');
+        };
+        reader.readAsDataURL(imgFile);
+    }else{
+        const spot = {name,lng,lat,img:'https://images.amap.com/watermark/1693640894.jpg',desc,suggestTime:time,playTime:duration,food};
+        spotList.push(spot);
+        saveSpots();
+        clearAddForm();
+        renderList();
+        renderMarkers();
+        alert('✅ 景点已添加（可后续添加图片）');
+    }
+}
+
+// 清空添加表单
+function clearAddForm(){
+    document.getElementById('newName').value='';
+    document.getElementById('newLng').value='';
+    document.getElementById('newLat').value='';
+    document.getElementById('newImgFile').value='';
+    document.getElementById('imgPreview').style.display='none';
+    document.getElementById('newDesc').value='';
+    document.getElementById('newTime').value='';
+    document.getElementById('newDuration').value='';
+    document.getElementById('newFood').value='';
+    toggleAddForm();
+}
+
+// 高亮景点（地图和列表联动）
+function highlightSpot(idx){
+    activeSpotIdx = idx;
+    const s = spotList[idx];
+    map.setCenter([s.lng, s.lat]);
+    map.setZoom(13);
+    renderList();
+    renderMarkers();
+}
+
+// 编辑景点图片
+function editSpotImg(idx){
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        if(!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            spotList[idx].img = event.target.result;
+            saveSpots();
+            renderList();
+            renderMarkers();
+            alert('✅ 图片已更新并保存');
+        };
+        reader.readAsDataURL(file);
+    };
+    input.click();
+}
+
+// 删除景点
+function deleteSpot(idx){
+    if(!confirm('确定删除该景点？')){return;}
+    spotList.splice(idx,1);
+    selected = selected.filter(i=>i!==idx).map(i=>i>idx?i-1:i);
+    if(activeSpotIdx === idx){
+        activeSpotIdx = -1;
+    }else if(activeSpotIdx > idx){
+        activeSpotIdx--;
+    }
+    localStorage.setItem('selSpot',JSON.stringify(selected));
+    saveSpots();
+    renderList();
+    renderMarkers();
+}
+
+// 渲染侧边列表
+function renderList(){
+    const box = document.getElementById('listBox');
+    box.innerHTML = '';
+    spotList.forEach((s,idx)=>{
+        const checked = selected.includes(idx);
+        const isActive = idx === activeSpotIdx;
+        const div = document.createElement('div');
+        div.className = "item" + (checked?" selected":"") + (isActive?" active":"");
+        div.onclick = () => { highlightSpot(idx); };
+        
+        let imgHtml = s.img?`<img src="${s.img}" class="item-img" onerror="this.src='data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 width=%22100%22 height=%22100%22%3E%3Crect fill=%22%23ddd%22 width=%22100%22 height=%22100%22/%3E%3Ctext text-anchor=%22middle%22 dy=%22.3em%22 x=%2250%22 y=%2250%22 font-size=%2214%22 fill=%22%23999%22%3E无图片%3C/text%3E%3C/svg%3E'">`:'';
+        
+        div.innerHTML = `
+        <div class="item-title">
+            <label style="flex:1" onclick="event.stopPropagation()">
+                <input type="checkbox" ${checked?"checked":""} onchange="toggleSel(${idx})" style="margin-right:6px">
+                <h4>${s.name}</h4>
+            </label>
+            <div class="item-actions" onclick="event.stopPropagation()">
+                <button class="img-edit-btn" onclick="editSpotImg(${idx})">🖼️换图</button>
+                ${idx>=7?'<button class="btn-del" onclick="deleteSpot('+idx+')" style="padding:2px 6px;font-size:11px">删除</button>':''}
+            </div>
+        </div>
+        ${imgHtml}
+        <div class="tip">🕒${s.suggestTime||'待定'}</div>
+        <div class="tip">⌛${s.playTime||'未知'}</div>
+        <div class="tip">📝${s.desc}</div>
+        <div class="tip">🍜${s.food||'自行探寻'}</div>
+        `;
+        box.appendChild(div);
+    })
+}
+
+// 地图打点标记
+function renderMarkers(){
+    markers.forEach(m=>m.remove());
+    markers=[];
+    spotList.forEach((s,idx)=>{
+        const isSelected = selected.includes(idx);
+        const isActive = idx === activeSpotIdx;
+        const color = colors[idx % colors.length];
+        
+        const marker = new AMap.Marker({
+            position: [s.lng,s.lat],
+            title:s.name,
+            map:map,
+            icon: createIcon(s.name, color, isSelected, isActive),
+            offset: new AMap.Pixel(-20, -(isActive?48:40))
+        });
+        
+        marker.on('click',()=>{
+            highlightSpot(idx);
+            const content = `<div style="padding:8px;border-radius:4px;min-width:200px">
+                <div style="font-weight:bold;color:#007acc;margin-bottom:4px;font-size:14px">${s.name}</div>
+                ${s.img?'<img src="'+s.img+'" style="width:220px;height:140px;object-fit:cover;border-radius:4px;margin-bottom:6px" onerror="this.style.display=\'none\'">':''}
+                <div style="font-size:12px;color:#666;line-height:1.6">
+                    <div>🕒${s.suggestTime||'待정'}</div>
+                    <div>⌛${s.playTime||'未知'}</div>
+                    <div style="margin-top:6px">${s.desc}</div>
+                    <div style="margin-top:6px">🍜${s.food||'自行探寻'}</div>
+                </div>
+            </div>`;
+            
+            const infoWindow = new AMap.InfoWindow({
+                content:content,
+                offset:new AMap.Pixel(0,-(isActive?48:40))
+            });
+            infoWindow.open(map,marker.getPosition());
+        });
+        
+        markers.push(marker);
+    })
+}
+
+// 创建彩色标记图标
+function createIcon(name, color, selected, active){
+    const size = active ? 40 : (selected ? 32 : 28);
+    const svg = `<svg width="${size}" height="${size}" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+            <filter id="shadow">
+                <feDropShadow dx="0" dy="1" stdDeviation="2" flood-opacity="0.3"/>
+            </filter>
+        </defs>
+        <circle cx="16" cy="12" r="${size/2-4}" fill="${color}" filter="url(#shadow)" stroke="${active?'#ff6b6b':'white'}" stroke-width="${active?2:1}"/>
+        <circle cx="16" cy="12" r="${size/2-6}" fill="white" opacity="0.3"/>
+        <polygon points="16,28 22,16 16,10 10,16" fill="${color}"/>
+    </svg>`;
+    
+    const icon = new AMap.Icon({
+        image: 'data:image/svg+xml;base64,'+btoa(svg),
+        size: new AMap.Size(size, size),
+        imageSize: new AMap.Size(size, size)
+    });
+    return icon;
+}
+
+// 勾选/取消收藏
+function toggleSel(idx){
+    if(selected.includes(idx)){
+        selected = selected.filter(i=>i!==idx)
+    }else{
+        selected.push(idx)
+    }
+    localStorage.setItem('selSpot',JSON.stringify(selected));
+    renderList();
+    renderMarkers();
+}
+
+// 生成路线文本
+function genRoute(){
+    const pick = selected.map(i=>spotList[i]);
+    if(pick.length===0){
+        alert("请勾选至少一个想去的景点！");
+        return;
+    }
+    let text = "====👢 威海出行路线规划 👢====\n";
+    pick.forEach((spot,num)=>{
+        text += `\n【${num+1}. ${spot.name}】\n🕒 ${spot.suggestTime}\n⌛ ${spot.playTime}\n📝 ${spot.desc}\n🍲 美食：${spot.food}\n`
+    })
+    text += "\n💡小贴士：可按地理位置顺序调整游览先后顺序，复制文本即可保存使用！";
+    document.getElementById('outText').value = text;
+    switchTab('route');
+}
+
+// 复制导出
+function copyExport(){
+    const ta = document.getElementById('outText');
+    if(!ta.value){
+        alert("请先点击生成路线按钮！");return;
+    }
+    ta.select();
+    document.execCommand('copy');
+    alert("✅ 路线已复制到剪贴板");
+}
+
+// 导出景点数据为JSON文件（包含图片Base64）
+function exportData(){
+    const custom = spotList.slice(7);
+    if(custom.length === 0){
+        alert('暂无自定义景点可导出');
+        return;
+    }
+    
+    const data = {
+        exportTime: new Date().toLocaleString('zh-CN'),
+        spots: custom
+    };
+    
+    const json = JSON.stringify(data, null, 2);
+    const blob = new Blob([json], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `威海景点_${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    alert('✅ 数据已导出，请自行选择保存位置');
+}
+
+// 导入景点数据
+function importData(){
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json';
+    input.onchange = (e) => {
+        const file = e.target.files[0];
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try{
+                const data = JSON.parse(event.target.result);
+                if(!data.spots || !Array.isArray(data.spots)){
+                    alert('无效的数据格式');
+                    return;
+                }
+                spotList = spotList.slice(0, 7).concat(data.spots);
+                saveSpots();
+                renderList();
+                renderMarkers();
+                alert(`✅ 已导入${data.spots.length}个景点`);
+            }catch(err){
+                alert('导入失败：' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    };
+    input.click();
+}
+</script>
+</body>
+</html>
